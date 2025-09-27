@@ -8,7 +8,11 @@ from telegram import BotCommand
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
 from config import BOT_TOKEN
-from handlers import *
+
+# Import handlers directly from their modules to avoid circular imports
+from handlers.admin_handlers import delete_messages, warn_user, mute_user, ban_user
+from handlers.user_handlers import start, help_command, check_reputation, monitor_user, status, test_command, welcome_new_member
+from handlers.message_handlers import detect_controversial, arabic_help, arabic_delete, arabic_warn, arabic_mute, arabic_ban, arabic_rep, arabic_monitor
 
 logger = logging.getLogger("groupmanager")
 

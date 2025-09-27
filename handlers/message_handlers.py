@@ -23,31 +23,31 @@ async def detect_controversial(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception:
         logger.exception("detect_controversial failed")
 
-# Arabic command wrappers
+# Arabic command wrappers - import inside functions to avoid circular imports
 async def arabic_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .user_handlers import help_command
+    from handlers.user_handlers import help_command
     await help_command(update, context)
 
 async def arabic_delete(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .admin_handlers import delete_messages
+    from handlers.admin_handlers import delete_messages
     await delete_messages(update, context)
 
 async def arabic_warn(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .admin_handlers import warn_user
+    from handlers.admin_handlers import warn_user
     await warn_user(update, context)
 
 async def arabic_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .admin_handlers import mute_user
+    from handlers.admin_handlers import mute_user
     await mute_user(update, context)
 
 async def arabic_ban(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .admin_handlers import ban_user
+    from handlers.admin_handlers import ban_user
     await ban_user(update, context)
 
 async def arabic_rep(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .user_handlers import check_reputation
+    from handlers.user_handlers import check_reputation
     await check_reputation(update, context)
 
 async def arabic_monitor(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    from .user_handlers import monitor_user
+    from handlers.user_handlers import monitor_user
     await monitor_user(update, context)
