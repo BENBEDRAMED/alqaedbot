@@ -2,19 +2,20 @@
 # -*- coding: utf-8 -*-
 
 import os
+import sys
 import logging
 import asyncio
 import requests
-from telegram import Update, ChatPermissions
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-from datetime import datetime, timedelta
-import sqlite3
 import threading
 from flask import Flask, request
+from datetime import datetime, timedelta
+import sqlite3
 import time
 import re
 import random
-import sys
+
+from telegram import Update, ChatPermissions, BotCommand
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 # -----------------------
 # Logging
@@ -29,15 +30,19 @@ logger = logging.getLogger(__name__)
 # Environment
 # -----------------------
 BOT_TOKEN = os.environ.get('BOT_TOKEN')
-RENDER_APP_URL = os.environ.get('RENDER_APP_URL')  # e.g., https://your-app.onrender.com
+RENDER_APP_URL = os.environ.get('RENDER_APP_URL')  # Must be set (https://your-app.onrender.com)
 PORT = int(os.environ.get('PORT', 10000))
 
 if not BOT_TOKEN:
     logger.error("❌ BOT_TOKEN not found in environment variables")
     sys.exit(1)
 
+if not RENDER_APP_URL:
+    logger.error("❌ RENDER_APP_URL not set. This script is webhook-only; set RENDER_APP_URL to your public HTTPS URL (e.g. https://your-app.onrender.com) and redeploy.")
+    sys.exit(1)
+
 # -----------------------
-# Flask app (for webhook)
+# Flask app (webhook)
 # -----------------------
 app = Flask(__name__)
 
@@ -86,18 +91,18 @@ WELCOME_MESSAGES = [
 ]
 
 # -----------------------
-# Main bot class
+# Main bot class (webhook-only)
 # -----------------------
 class GroupManagerBot:
     def __init__(self, token: str):
         self.token = token
         self.application = Application.builder().token(token).build()
-        self.loop = None  # Will hold the asyncio loop where the application runs (when using webhook)
+        self.loop = None  # will capture the asyncio loop used by the running application
         self.setup_handlers()
-        logger.info("✅ Bot application created successfully")
-    
+        logger.info("✅ Bot application object created")
+
     def setup_handlers(self):
-        # Register ASCII command names with CommandHandler (safe for library validation)
+        # ASCII command names registered with CommandHandler (safe)
         self.application.add_handler(CommandHandler("start", self.start))
         self.application.add_handler(CommandHandler("help", self.help_command))
         self.application.add_handler(CommandHandler("delete", self.delete_messages))
@@ -109,11 +114,11 @@ class GroupManagerBot:
         self.application.add_handler(CommandHandler("status", self.status))
         self.application.add_handler(CommandHandler("test", self.test_command))
 
-        # Welcome & controversial detectors
+        # Welcome & message detectors
         self.application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.welcome_new_member))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.detect_controversial))
 
-        # Arabic command wrappers: use compiled regex patterns (cannot pass flags kw directly)
+        # Arabic wrappers using compiled regex
         self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/مساعدة(?:\s|$)', re.IGNORECASE)), self.arabic_help))
         self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/حذف(?:\s|$)', re.IGNORECASE)), self.arabic_delete))
         self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/تحذير(?:\s|$)', re.IGNORECASE)), self.arabic_warn))
@@ -122,9 +127,7 @@ class GroupManagerBot:
         self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/سمعة(?:\s|$)', re.IGNORECASE)), self.arabic_rep))
         self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/مراقبة(?:\s|$)', re.IGNORECASE)), self.arabic_monitor))
 
-    # -------------------
-    # Command implementations
-    # -------------------
+    # --- command implementations ---
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("مرحباً! أنا بوت إدارة المجموعات 🛡️\nاستخدم /help لرؤية الأوامر المتاحة")
 
@@ -155,15 +158,12 @@ class GroupManagerBot:
             if not context.args:
                 await update.message.reply_text("⚡ استخدام: /delete [عدد الرسائل]")
                 return
-            
             count = int(context.args[0])
             if count > 100:
                 await update.message.reply_text("❌ الحد الأقصى 100 رسالة")
                 return
-            
             chat_id = update.message.chat_id
             message_id = update.message.message_id
-            
             messages_deleted = 0
             for i in range(count + 1):
                 try:
@@ -171,30 +171,26 @@ class GroupManagerBot:
                     messages_deleted += 1
                 except Exception:
                     pass
-            
             confirm_msg = await update.message.reply_text(f"🗑️ تم حذف {messages_deleted} رسائل بنجاح")
             await asyncio.sleep(3)
             try:
                 await confirm_msg.delete()
             except:
                 pass
-                
         except ValueError:
             await update.message.reply_text("❌ يرجى إدخال رقم صحيح")
 
     async def welcome_new_member(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         for member in update.message.new_chat_members:
-            # avoid welcoming the bot itself
             me = await context.bot.get_me()
             if member.id != me.id:
-                welcome_text = random.choice(WELCOME_MESSAGES).format(name=getattr(member, "first_name", "صديق") or "صديق")
-                await update.message.reply_text(welcome_text)
+                name = getattr(member, "first_name", None) or getattr(member, "full_name", None) or "صديق"
+                await update.message.reply_text(random.choice(WELCOME_MESSAGES).format(name=name))
 
     async def detect_controversial(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         message_text = (update.message.text or "").lower()
-        found_words = [word for word in CONTROVERSIAL_WORDS if word in message_text]
-        
-        if found_words:
+        found = [w for w in CONTROVERSIAL_WORDS if w in message_text]
+        if found:
             try:
                 await update.message.delete()
                 await context.bot.send_message(update.message.chat_id, "⚠️ تنبيه: تم حذف رسالة تحتوي على كلمات مثيرة للجدل")
@@ -205,23 +201,18 @@ class GroupManagerBot:
         if not update.message.reply_to_message or not context.args:
             await update.message.reply_text("⚡ استخدام: رد على رسالة المستخدم + /warn [السبب]")
             return
-        
         user_id = update.message.reply_to_message.from_user.id
         reason = " ".join(context.args)
-        
         await self.add_warning(user_id, reason)
         warning_count = self.get_warning_count(user_id)
-        
         await update.message.reply_text(f"⚠️ تم تحذير المستخدم\nالسبب: {reason}\nعدد التحذيرات: {warning_count}/3")
 
     async def mute_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not update.message.reply_to_message or not context.args:
             await update.message.reply_text("⚡ استخدام: رد على رسالة المستخدم + /mute [المدة]")
             return
-        
         duration = context.args[0]
         user_id = update.message.reply_to_message.from_user.id
-        
         try:
             if duration.endswith('h'):
                 hours = int(duration[:-1])
@@ -232,11 +223,9 @@ class GroupManagerBot:
             else:
                 await update.message.reply_text("❌ صيغة المدة غير صحيحة (استخدم 1h, 30m)")
                 return
-            
             permissions = ChatPermissions(can_send_messages=False)
             await context.bot.restrict_chat_member(update.message.chat_id, user_id, permissions, until_date=until_date)
             await update.message.reply_text(f"🔇 تم كتم المستخدم لمدة {duration}")
-            
         except Exception as e:
             await update.message.reply_text(f"❌ خطأ في الكتم: {e}")
 
@@ -253,11 +242,9 @@ class GroupManagerBot:
             user_id = update.message.reply_to_message.from_user.id
         else:
             user_id = update.message.from_user.id
-        
         cursor = db.conn.cursor()
         cursor.execute('SELECT reputation, warnings FROM users WHERE user_id = ?', (user_id,))
         result = cursor.fetchone()
-        
         if result:
             reputation, warnings = result
             stars = "⭐" * min(reputation, 5)
@@ -269,7 +256,6 @@ class GroupManagerBot:
         cursor = db.conn.cursor()
         cursor.execute('SELECT COUNT(*) FROM users')
         user_count = cursor.fetchone()[0]
-        
         await update.message.reply_text(f"📊 إحصائيات:\n👥 الأعضاء: {user_count}\n🕒 {datetime.now().strftime('%Y-%m-%d %H:%M')}")
 
     async def status(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -281,10 +267,7 @@ class GroupManagerBot:
     # DB helpers
     async def add_warning(self, user_id: int, reason: str):
         cursor = db.conn.cursor()
-        cursor.execute('''
-            INSERT OR IGNORE INTO users (user_id, username, reputation, warnings)
-            VALUES (?, ?, 0, 0)
-        ''', (user_id, ""))
+        cursor.execute('INSERT OR IGNORE INTO users (user_id, username, reputation, warnings) VALUES (?, ?, 0, 0)', (user_id, ""))
         cursor.execute('UPDATE users SET warnings = warnings + 1 WHERE user_id = ?', (user_id,))
         db.conn.commit()
 
@@ -294,9 +277,7 @@ class GroupManagerBot:
         result = cursor.fetchone()
         return result[0] if result else 0
 
-    # -------------------
-    # Arabic wrappers (parse args from message text)
-    # -------------------
+    # Arabic wrappers (parse args)
     async def arabic_help(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         await self.help_command(update, context)
 
@@ -311,7 +292,6 @@ class GroupManagerBot:
         except Exception:
             await update.message.reply_text("❌ يرجى إدخال رقم صحيح")
             return
-        
         chat_id = update.message.chat_id
         message_id = update.message.message_id
         messages_deleted = 0
@@ -388,39 +368,36 @@ class GroupManagerBot:
         await self.monitor_user(update, context)
 
     # -------------------
-    # Webhook / Polling setup
+    # Webhook setup (webhook-only)
     # -------------------
     async def setup_webhook(self):
-        """
-        If RENDER_APP_URL is set, configure webhook and start the application in the current asyncio loop.
-        Save that loop in self.loop so external threads (Flask) can schedule tasks safely using
-        asyncio.run_coroutine_threadsafe.
-        If RENDER_APP_URL is not set, fallback to polling by running run_polling inside a background thread
-        with its own asyncio.run(...) call (so the coroutine is actually awaited).
-        """
-        if RENDER_APP_URL:
-            webhook_url = f"{RENDER_APP_URL}/webhook"
-            await self.application.bot.set_webhook(webhook_url)
-            logger.info(f"✅ Webhook set to: {webhook_url}")
-            # initialize and start the application (non-blocking start)
-            await self.application.initialize()
-            await self.application.start()
-            # capture the running loop so Flask route can safely schedule to it
-            try:
-                self.loop = asyncio.get_running_loop()
-                logger.info("✅ Application initialized and started (webhook mode). Event loop captured.")
-            except RuntimeError:
-                logger.warning("⚠️ Could not capture running loop (unexpected).")
-        else:
-            # Polling fallback: run asyncio.run(self.application.run_polling()) inside a thread
-            logger.warning("❌ RENDER_APP_URL not set, starting polling fallback in a background thread.")
-            def run_polling():
-                try:
-                    asyncio.run(self.application.run_polling(poll_interval=1.0))
-                except Exception as e:
-                    logger.error(f"Polling failed: {e}")
-            thr = threading.Thread(target=run_polling, daemon=True)
-            thr.start()
+        webhook_url = f"{RENDER_APP_URL.rstrip('/')}/webhook"
+        # initialize the application first (creates internal bot etc.)
+        await self.application.initialize()
+        # set webhook on Telegram via bot
+        await self.application.bot.set_webhook(webhook_url)
+        logger.info(f"✅ Webhook set to: {webhook_url}")
+        # (optional) register visible commands in Telegram client
+        try:
+            commands = [
+                BotCommand("start", "Start the bot"),
+                BotCommand("help", "Show help"),
+                BotCommand("delete", "Delete messages"),
+                BotCommand("warn", "Warn a user"),
+                BotCommand("mute", "Mute a user"),
+                BotCommand("ban", "Ban a user"),
+            ]
+            await self.application.bot.set_my_commands(commands)
+        except Exception as e:
+            logger.debug(f"Could not set bot commands: {e}")
+        # start the application (non-blocking)
+        await self.application.start()
+        # capture running loop so Flask thread can schedule into it
+        try:
+            self.loop = asyncio.get_running_loop()
+            logger.info("✅ Application started and event loop captured for webhook handling.")
+        except RuntimeError:
+            logger.warning("⚠️ Could not capture event loop (unexpected)")
 
 # -----------------------
 # Create bot instance
@@ -437,25 +414,20 @@ def home():
 @app.route('/webhook', methods=['POST'])
 def webhook():
     """
-    Receive Telegram updates via webhook and put them into the application's update_queue.
-    We use asyncio.run_coroutine_threadsafe(coro, loop) to schedule the coroutine on the bot's
-    running loop (captured earlier in group_bot.loop), which is thread-safe.
+    Receive Telegram updates via webhook and schedule them into the bot's update queue.
+    Use asyncio.run_coroutine_threadsafe to schedule the coroutine on the application's loop.
     """
     try:
         data = request.get_json(force=True)
         update = Update.de_json(data, group_bot.application.bot)
 
-        # If we have the bot loop (webhook mode), schedule queue.put coroutine on that loop
         if getattr(group_bot, "loop", None):
             fut = asyncio.run_coroutine_threadsafe(group_bot.application.update_queue.put(update), group_bot.loop)
-            # optional: wait for result with timeout (not necessary)
-            # fut.result(timeout=2)
+            # we don't block waiting for fut.result()
             return 'OK'
         else:
-            # Polling mode: we won't be receiving webhooks normally; return 400
-            logger.warning("Received webhook but bot is in polling fallback (no loop captured).")
-            return 'NOOP', 400
-
+            logger.error("Webhook received but bot loop is not available.")
+            return 'NO_LOOP', 500
     except Exception as e:
         logger.error(f"Webhook error: {e}")
         return 'ERROR', 500
@@ -468,22 +440,17 @@ def health_check():
 def wake_up():
     return {'status': 'awake', 'timestamp': datetime.now().isoformat()}
 
-# -----------------------
-# Keep-alive thread (optional)
-# -----------------------
+# Optional keep-alive to prevent idling (if you want)
 def keep_alive():
     def run():
         while True:
             try:
-                if RENDER_APP_URL:
-                    # ping our app to keep awake if desired
-                    requests.get(f"{RENDER_APP_URL}/wakeup", timeout=10)
-                    logger.debug("✅ Keep-alive request sent")
-            except Exception as e:
-                logger.debug(f"Keep-alive error: {e}")
+                requests.get(f"{RENDER_APP_URL.rstrip('/')}/wakeup", timeout=10)
+            except Exception:
+                pass
             time.sleep(300)
-    thread = threading.Thread(target=run, daemon=True)
-    thread.start()
+    thr = threading.Thread(target=run, daemon=True)
+    thr.start()
 
 # -----------------------
 # Starter
@@ -492,14 +459,21 @@ async def main():
     try:
         await group_bot.setup_webhook()
         keep_alive()
-        logger.info("✅ Bot setup complete.")
+        logger.info("✅ Bot webhook setup complete; running. (Press Ctrl+C to exit)")
+        # Keep the asyncio loop running forever (so application stays alive)
+        await asyncio.Event().wait()
     except Exception as e:
-        logger.error(f"❌ Failed to start bot: {e}")
+        logger.exception(f"Failed to start webhook bot: {e}")
+        raise
 
 if __name__ == '__main__':
-    # Run setup (starts the PTB application either in current loop (webhook) or as a background polling thread)
-    asyncio.run(main())
+    # Start Flask in a background thread so it can accept webhook POSTs
+    def run_flask():
+        # In Render environment this binds to the correct port
+        app.run(host='0.0.0.0', port=PORT, debug=False)
 
-    # Start Flask (blocking)
-    # Note: Render/production will provide a proper host; this is fine for many hosts.
-    app.run(host='0.0.0.0', port=PORT, debug=False)
+    flask_thread = threading.Thread(target=run_flask, daemon=True)
+    flask_thread.start()
+
+    # Run the bot (this will start the PTB application and block forever)
+    asyncio.run(main())
