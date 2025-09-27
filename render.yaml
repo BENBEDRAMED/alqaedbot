@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: telegram-bot
+    env: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    envVars:
+      - key: BOT_TOKEN
+        value: 8446086535:AAHhtzKlxybKvZ1vTk4Si91ULMhv4ht7m0U
+      - key: PORT
+        value: 8443
