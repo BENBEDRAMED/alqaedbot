@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import os
 import sqlite3
 import logging
 from config import DB_PATH
@@ -9,6 +10,9 @@ logger = logging.getLogger("groupmanager")
 
 class Database:
     def __init__(self, path=DB_PATH):
+        # Ensure the data directory exists
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        
         self.path = path
         self.conn = sqlite3.connect(self.path, check_same_thread=False)
         self.create_tables()

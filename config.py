@@ -3,6 +3,9 @@
 
 import os
 
+# Ensure data directory exists
+os.makedirs("data", exist_ok=True)
+
 # Bot Configuration
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 RENDER_APP_URL = os.environ.get("RENDER_APP_URL")
@@ -13,7 +16,7 @@ DB_PATH = os.path.join("data", "group_manager.db")
 
 # Content filtering
 CONTROVERSIAL_WORDS = [
-    "سياسة", "طائفية", "عنصرية", "شتيمة", "سب", "تحريض",
+    "سياسة", "طائفية", "عنصرية", "شتيمة", "سب", "تحذير",
     "كره", "تطرف", "إساءة", "فساد", "فاسد", "سخرية"
 ]
 

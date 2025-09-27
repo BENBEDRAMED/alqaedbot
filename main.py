@@ -13,8 +13,7 @@ from flask import Flask, request
 from config import BOT_TOKEN, RENDER_APP_URL, PORT
 from bot import GroupManagerBot
 
-# Setup logging
-os.makedirs("data", exist_ok=True)
+# Setup logging (data directory already exists from config import)
 log_file = os.path.join("data", "bot.log")
 logging.basicConfig(
     level=logging.INFO,
