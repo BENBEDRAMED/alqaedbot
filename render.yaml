@@ -1,12 +1,12 @@
 services:
   - type: web
-    name: telegram-bot
+    name: telegram-bot-webhook
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     envVars:
       - key: BOT_TOKEN
-        value: 8446086535:AAHhtzKlxybKvZ1vTk4Si91ULMhv4ht7m0U
+        sync: false
       - key: PORT
-        value: 8443
+        value: 10000
