@@ -98,15 +98,14 @@ class GroupManagerBot:
         self.application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, self.welcome_new_member))
         self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, self.detect_controversial))
 
-        # Arabic command wrappers via regex (these call small wrapper methods below)
-        # Use ^/cmd(?:\s|$) to match command start and optional args
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/مساعدة(?:\s|$)', flags=re.IGNORECASE), self.arabic_help))
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/حذف(?:\s|$)', flags=re.IGNORECASE), self.arabic_delete))
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/تحذير(?:\s|$)', flags=re.IGNORECASE), self.arabic_warn))
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/كتم(?:\s|$)', flags=re.IGNORECASE), self.arabic_mute))
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/حظر(?:\s|$)', flags=re.IGNORECASE), self.arabic_ban))
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/سمعة(?:\s|$)', flags=re.IGNORECASE), self.arabic_rep))
-        self.application.add_handler(MessageHandler(filters.Regex(r'^/مراقبة(?:\s|$)', flags=re.IGNORECASE), self.arabic_monitor))
+        # Arabic command wrappers via compiled regex (use re.compile to set flags)
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/مساعدة(?:\s|$)', re.IGNORECASE)), self.arabic_help))
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/حذف(?:\s|$)', re.IGNORECASE)), self.arabic_delete))
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/تحذير(?:\s|$)', re.IGNORECASE)), self.arabic_warn))
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/كتم(?:\s|$)', re.IGNORECASE)), self.arabic_mute))
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/حظر(?:\s|$)', re.IGNORECASE)), self.arabic_ban))
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/سمعة(?:\s|$)', re.IGNORECASE)), self.arabic_rep))
+        self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/مراقبة(?:\s|$)', re.IGNORECASE)), self.arabic_monitor))
 
     # --- Core command implementations (these are used by ASCII commands & wrappers) ---
     async def start(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
