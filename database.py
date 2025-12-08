@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
+
 
 import os
 import sqlite3
@@ -37,7 +36,7 @@ class Database:
             CREATE TABLE IF NOT EXISTS monitored_users (
                 user_id INTEGER,
                 chat_id INTEGER,
-                action_type TEXT DEFAULT 'muted',  # 'muted', 'monitored', etc.
+                action_type TEXT DEFAULT 'muted',   'muted', 'monitored', etc.
                 monitored_at DATETIME DEFAULT CURRENT_TIMESTAMP,
                 PRIMARY KEY (user_id, chat_id)
             )
@@ -51,7 +50,7 @@ class Database:
                 chat_id INTEGER,
                 text TEXT,
                 deleted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-                reason TEXT  # 'shadow_mute', 'controversial', 'admin_delete'
+                reason TEXT   'shadow_mute', 'controversial', 'admin_delete'
             )
         ''')
         
