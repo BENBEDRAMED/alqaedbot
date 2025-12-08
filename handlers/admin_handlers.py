@@ -312,68 +312,57 @@ async def unkick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ حدث خطأ أثناء محاولة إلغاء الحظر")
 
 async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search and send YouTube music"""
+    """Search, download, and send YouTube audio"""
     try:
-        # Check if user provided song name
         if not context.args:
-            await update.message.reply_text(
-                "🎵 استخدام: /play [اسم الأغنية]\n"
-                "مثال: /play Shape of You\n"
-                "أو: /play أغنية حبيبي"
-            )
+            await update.message.reply_text("🎵 استخدام: /play [اسم الأغنية]")
             return
-        
-        # Get song query
+
         query = " ".join(context.args)
-        
-        # Send searching message
-        search_msg = await update.message.reply_text(
-            f"🔍 جاري البحث عن: {query}\n⏳ قد يستغرق بضع ثواني..."
-        )
-        
-        # Search YouTube
+        status_msg = await update.message.reply_text(f"🔍 جاري البحث عن: '{query}'...")
+
+        # Use the advanced player
         from handlers.music_handlers import music_player
-        url = music_player.search_youtube(query + " audio")
-        
+        url = music_player.search_youtube(query)
+
         if not url:
-            await search_msg.edit_text("❌ لم أتمكن من العثور على الأغنية")
+            await status_msg.edit_text("❌ لم أتمكن من العثور على الأغنية.")
             return
-        
-        # Get video info
+
+        # Get video info for feedback
         title, duration = music_player.get_video_info(url)
-        await search_msg.edit_text(f"🎶 تم العثور على:\n**{title}** ({duration})")
-        
-        # Download audio
-        download_msg = await update.message.reply_text("⬇️ جاري تحميل الصوت...")
+        await status_msg.edit_text(f"🎵 تم العثور على: **{title}**\n⏳ جاري التحميل...", parse_mode="Markdown")
+
+        # Download audio (this uses the multi-strategy method)
         audio_file = music_player.download_audio(url)
-        
-        if not audio_file:
-            await download_msg.edit_text("❌ فشل في تحميل الصوت")
+
+        if not audio_file or not os.path.exists(audio_file):
+            await status_msg.edit_text("❌ فشل في تحميل الصوت. قد يكون الفيديو محمياً أو هناك مشكلة في الشبكة.")
             return
-        
-        # Send audio file
-        await download_msg.edit_text("📤 جاري إرسال الملف...")
-        
+
+        # Send the audio file
+        await status_msg.edit_text("📤 جاري إرسال الملف...")
         try:
-            with open(audio_file, 'rb') as audio:
+            with open(audio_file, 'rb') as f:
                 await context.bot.send_audio(
                     chat_id=update.effective_chat.id,
-                    audio=audio,
-                    title=title,
-                    duration=int(duration.replace(':', '')) if ':' in duration else 0,
+                    audio=f,
+                    title=title[:64],  # Telegram title limit
+                    duration=int(duration.split(':')[0])*60 + int(duration.split(':')[1]) if ':' in duration else 0,
                     performer="YouTube",
                     caption=f"🎵 {title}"
                 )
-            
             # Cleanup
             os.remove(audio_file)
-            await download_msg.delete()
-            await search_msg.edit_text(f"✅ تم إرسال: **{title}**")
-            
+            await status_msg.edit_text(f"✅ تم إرسال: **{title}**", parse_mode="Markdown")
         except Exception as e:
             logger.error(f"Failed to send audio: {e}")
-            await download_msg.edit_text("❌ فشل في إرسال الملف")
-            
+            await status_msg.edit_text("❌ فشل في إرسال الملف. قد يكون الملف كبيراً جداً.")
+            if os.path.exists(audio_file):
+                os.remove(audio_file)
     except Exception as e:
         logger.exception(f"play_music failed: {e}")
-        await update.message.reply_text("❌ حدث خطأ أثناء تشغيل الموسيقى")
+        try:
+            await update.message.reply_text("❌ حدث خطأ داخلي أثناء معالجة طلبك.")
+        except:
+            pass

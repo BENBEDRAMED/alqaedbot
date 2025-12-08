@@ -3,10 +3,15 @@ services:
     name: telegram-bot-webhook
     env: python
     plan: free
-    buildCommand: pip install -r requirements.txt
-    startCommand: python bot.py
+    buildCommand: |
+      sudo apt-get update
+      sudo apt-get install -y ffmpeg
+      pip install -r requirements.txt
+    startCommand: python main.py
     envVars:
       - key: BOT_TOKEN
         sync: false
       - key: PORT
         value: 10000
+      - key: RENDER_APP_URL
+        fromGroup: null
