@@ -168,6 +168,27 @@ class Database:
             logger.error(f"Error getting monitored count: {e}")
             return 0
 
+
+# In database.py, add:
+def add_song_request(self, user_id: int, chat_id: int, song_name: str):
+    """Log song requests"""
+    with self.conn:
+        self.conn.execute('''
+            INSERT INTO song_requests (user_id, chat_id, song_name, requested_at)
+            VALUES (?, ?, ?, datetime('now'))
+        ''', (user_id, chat_id, song_name))
+
+def get_top_songs(self, chat_id: int, limit: int = 10):
+    """Get most requested songs in chat"""
+    cursor = self.conn.execute('''
+        SELECT song_name, COUNT(*) as request_count
+        FROM song_requests 
+        WHERE chat_id=?
+        GROUP BY song_name 
+        ORDER BY request_count DESC 
+        LIMIT ?
+    ''', (chat_id, limit))
+    return cursor.fetchall()
     def close(self):
         if self.conn:
             self.conn.close()
