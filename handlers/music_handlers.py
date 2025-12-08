@@ -1,66 +1,100 @@
-async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search and send YouTube music"""
-    try:
-        # Check if user provided song name
-        if not context.args:
-            await update.message.reply_text(
-                "🎵 استخدام: /play [اسم الأغنية]\n"
-                "مثال: /play Shape of You\n"
-                "أو: /play أغنية حبيبي"
-            )
-            return
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import os
+import re
+import logging
+import asyncio
+import tempfile
+from typing import Optional, Tuple
+import yt_dlp
+import requests
+from telegram import Update
+from telegram.ext import ContextTypes
+
+logger = logging.getLogger("groupmanager")
+
+class MusicPlayer:
+    def __init__(self):
+        self.download_path = "downloads"
+        os.makedirs(self.download_path, exist_ok=True)
         
-        # Get song query
-        query = " ".join(context.args)
-        
-        # Send searching message
-        search_msg = await update.message.reply_text(
-            f"🔍 جاري البحث عن: {query}\n⏳ قد يستغرق بضع ثواني..."
-        )
-        
-        # Search YouTube
-        from music_player import music_player
-        url = music_player.search_youtube(query + " audio")
-        
-        if not url:
-            await search_msg.edit_text("❌ لم أتمكن من العثور على الأغنية")
-            return
-        
-        # Get video info
-        title, duration = music_player.get_video_info(url)
-        await search_msg.edit_text(f"🎶 تم العثور على:\n**{title}** ({duration})")
-        
-        # Download audio
-        download_msg = await update.message.reply_text("⬇️ جاري تحميل الصوت...")
-        audio_file = music_player.download_audio(url)
-        
-        if not audio_file:
-            await download_msg.edit_text("❌ فشل في تحميل الصوت")
-            return
-        
-        # Send audio file
-        await download_msg.edit_text("📤 جاري إرسال الملف...")
-        
+        # YouTube DL options for audio only
+        self.ydl_opts = {
+            'format': 'bestaudio/best',
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }],
+            'outtmpl': os.path.join(self.download_path, '%(title)s.%(ext)s'),
+            'quiet': True,
+            'no_warnings': True,
+            'noplaylist': True,
+            'max_downloads': 1,
+        }
+    
+    def search_youtube(self, query: str) -> Optional[str]:
+        """Search YouTube and return first video URL"""
         try:
-            with open(audio_file, 'rb') as audio:
-                await context.bot.send_audio(
-                    chat_id=update.effective_chat.id,
-                    audio=audio,
-                    title=title,
-                    duration=int(duration.replace(':', '')) if ':' in duration else 0,
-                    performer="YouTube",
-                    caption=f"🎵 {title}"
-                )
+            # Simple search using YouTube search
+            search_url = f"https://www.youtube.com/results?search_query={query.replace(' ', '+')}"
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            }
             
-            # Cleanup
-            os.remove(audio_file)
-            await download_msg.delete()
-            await search_msg.edit_text(f"✅ تم إرسال: **{title}**")
+            response = requests.get(search_url, headers=headers)
+            video_ids = re.findall(r'watch\?v=(\S{11})', response.text)
+            
+            if video_ids:
+                return f"https://www.youtube.com/watch?v={video_ids[0]}"
+            return None
             
         except Exception as e:
-            logger.error(f"Failed to send audio: {e}")
-            await download_msg.edit_text("❌ فشل في إرسال الملف")
+            logger.error(f"Search failed: {e}")
+            return None
+    
+    def download_audio(self, url: str) -> Optional[str]:
+        """Download audio from YouTube URL"""
+        try:
+            with yt_dlp.YoutubeDL(self.ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                
+                # Convert to mp3 filename
+                if filename.endswith('.webm'):
+                    mp3_filename = filename.replace('.webm', '.mp3')
+                elif filename.endswith('.m4a'):
+                    mp3_filename = filename.replace('.m4a', '.mp3')
+                else:
+                    mp3_filename = filename + '.mp3'
+                
+                if os.path.exists(mp3_filename):
+                    return mp3_filename
+                    
+            return None
             
-    except Exception as e:
-        logger.exception(f"play_music failed: {e}")
-        await update.message.reply_text("❌ حدث خطأ أثناء تشغيل الموسيقى")
+        except Exception as e:
+            logger.error(f"Download failed: {e}")
+            return None
+    
+    def get_video_info(self, url: str) -> Tuple[str, str]:
+        """Get video title and duration"""
+        try:
+            with yt_dlp.YoutubeDL({'quiet': True}) as ydl:
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'Unknown Title')
+                duration = info.get('duration', 0)
+                
+                # Format duration
+                if duration > 3600:
+                    duration_str = f"{duration//3600}:{(duration%3600)//60:02d}:{duration%60:02d}"
+                else:
+                    duration_str = f"{duration//60}:{duration%60:02d}"
+                
+                return title, duration_str
+        except:
+            return "Unknown Title", "0:00"
+
+# Create global instance
+music_player = MusicPlayer()
