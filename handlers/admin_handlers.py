@@ -267,3 +267,46 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("status command failed: %s", e)
         await update.message.reply_text("❌ حدث خطأ أثناء جلب الحالة")
+
+async def unkick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Unban a user (remove from ban list)"""
+    try:
+        # Optional: Delete command message
+        try:
+            await update.message.delete()
+        except:
+            pass
+        
+        target, _ = await resolve_target_user(update, context)
+        if not target:
+            await update.message.reply_text(
+                "⚡ استخدام: رد على رسالة المستخدم + /unkick أو /unkick @username\n"
+                "أو: /unkick user_id"
+            )
+            return
+        
+        # Unban the user
+        try:
+            await context.bot.unban_chat_member(
+                chat_id=update.effective_chat.id,
+                user_id=target.id,
+                only_if_banned=True  # Only unban if currently banned
+            )
+            
+            await update.message.reply_text(
+                f"✅ تم إلغاء حظر {getattr(target, 'first_name', str(target.id))}"
+            )
+            logger.info(f"Unbanned user {target.id} from chat {update.effective_chat.id}")
+            
+        except Exception as e:
+            if "user not banned" in str(e).lower():
+                await update.message.reply_text(
+                    f"ℹ️ المستخدم {getattr(target, 'first_name', str(target.id))} ليس محظوراً"
+                )
+            else:
+                logger.exception(f"Failed to unban user: {e}")
+                await update.message.reply_text(f"❌ تعذر إلغاء حظر المستخدم: {e}")
+                
+    except Exception as e:
+        logger.exception("unkick_user failed: %s", e)
+        await update.message.reply_text("❌ حدث خطأ أثناء محاولة إلغاء الحظر")
