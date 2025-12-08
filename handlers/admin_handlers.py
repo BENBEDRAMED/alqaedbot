@@ -332,7 +332,7 @@ async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         
         # Search YouTube
-        from music_handlers import music_player
+        from handlers.music_handlers import music_player
         url = music_player.search_youtube(query + " audio")
         
         if not url:
