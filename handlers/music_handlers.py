@@ -100,216 +100,250 @@ class AdvancedMusicPlayer:
             logger.error(f"Fallback search failed: {e}")
             return None
 
-def download_audio(self, url: str) -> Optional[str]:
-    """Download audio with improved strategies"""
-    # Strategy 1: Updated format selection
-    audio_file = self._download_strategy_1(url)
-    if audio_file:
-        return audio_file
-    
-    # Strategy 2: Alternative format
-    audio_file = self._download_strategy_2(url)
-    if audio_file:
-        return audio_file
-    
-    # Strategy 3: Direct command bypass
-    audio_file = self._download_strategy_3(url)
-    if audio_file:
-        return audio_file
-    
-    # Last resort: Try without format specification
-    return self._download_last_resort(url)
+    # ===== ADD THIS METHOD =====
+    def get_video_info(self, url: str) -> Tuple[str, str]:
+        """Get video title and duration"""
+        self._rate_limit()
+        try:
+            ydl_opts = {
+                'quiet': True,
+                'extract_flat': True,
+                'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
+                'user_agent': random.choice(self.user_agents),
+            }
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                title = info.get('title', 'Unknown Title')[:100]
+                duration = info.get('duration', 0)
 
-def _download_last_resort(self, url: str) -> Optional[str]:
-    """Try downloading without format restrictions"""
-    try:
-        ydl_opts = {
-            # Empty format = let yt-dlp choose
-            'format': '',
-            'outtmpl': os.path.join(self.download_path, '%(id)s.%(ext)s'),
-            'quiet': True,
-            'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
-            'user_agent': random.choice(self.user_agents),
-            'ignoreerrors': True,
-        }
+                # Format duration
+                if duration > 3600:
+                    dur_str = f"{duration//3600}:{(duration%3600)//60:02d}:{duration%60:02d}"
+                elif duration > 0:
+                    dur_str = f"{duration//60}:{duration%60:02d}"
+                else:
+                    dur_str = "?:??"
+
+                return title, dur_str
+        except Exception as e:
+            logger.error(f"Could not fetch video info: {e}")
+            return "Unknown Title", "?:??"
+    # ===== END OF NEW METHOD =====
+
+    def download_audio(self, url: str) -> Optional[str]:
+        """Download audio with improved strategies"""
+        # Strategy 1: Updated format selection
+        audio_file = self._download_strategy_1(url)
+        if audio_file:
+            return audio_file
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            
-            # Manually find and convert audio
-            import glob
-            video_id = url.split('v=')[-1].split('&')[0]
-            pattern = os.path.join(self.download_path, f'{video_id}.*')
-            files = glob.glob(pattern)
-            
-            for file in files:
-                # If it's an audio file, convert to mp3
-                if file.endswith(('.webm', '.m4a', '.opus')):
-                    mp3_file = os.path.splitext(file)[0] + '.mp3'
-                    os.system(f'ffmpeg -i "{file}" -codec:a libmp3lame -q:a 2 "{mp3_file}" -y 2>/dev/null')
-                    
-                    if os.path.exists(mp3_file):
-                        os.remove(file)
-                        return mp3_file
-            
-            return files[0] if files else None
-            
-    except Exception as e:
-        logger.error(f"Last resort failed: {e}")
-    return None
- def _download_strategy_1(self, url: str) -> Optional[str]:
-    """Primary: yt-dlp with correct format selection for 2024"""
-    self._rate_limit()
-    try:
-        ydl_opts = {
-            # ===== FIXED FORMAT SELECTION =====
-            'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
-            
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '192',
-            }],
-            
-            'outtmpl': os.path.join(self.download_path, '%(id)s.%(ext)s'),
-            'quiet': False,
-            'no_warnings': False,
-            'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
-            'user_agent': random.choice(self.user_agents),
-            
-            # ===== CRITICAL: Add these YouTube extractor args =====
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android', 'ios', 'web'],
-                    'player_skip': ['configs', 'webpage', 'js'],
-                    'formats': ['audio']
-                }
-            },
-            
-            # ===== Add JavaScript runtime =====
-            'extractor_retries': 3,
-            'ignoreerrors': True,
-            'retries': 10,
-            'fragment_retries': 10,
-            'skip_unavailable_fragments': True,
-        }
+        # Strategy 2: Alternative format
+        audio_file = self._download_strategy_2(url)
+        if audio_file:
+            return audio_file
         
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            filename = ydl.prepare_filename(info)
+        # Strategy 3: Direct command bypass
+        audio_file = self._download_strategy_3(url)
+        if audio_file:
+            return audio_file
+        
+        # Last resort: Try without format specification
+        return self._download_last_resort(url)
+
+    def _download_last_resort(self, url: str) -> Optional[str]:
+        """Try downloading without format restrictions"""
+        try:
+            ydl_opts = {
+                # Empty format = let yt-dlp choose
+                'format': '',
+                'outtmpl': os.path.join(self.download_path, '%(id)s.%(ext)s'),
+                'quiet': True,
+                'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
+                'user_agent': random.choice(self.user_agents),
+                'ignoreerrors': True,
+            }
             
-            # Convert to mp3
-            base, ext = os.path.splitext(filename)
-            mp3_filename = base + '.mp3'
-            
-            if os.path.exists(mp3_filename):
-                logger.info(f"✅ Strategy 1 succeeded: {mp3_filename}")
-                return mp3_filename
-            elif os.path.exists(filename):
-                # File downloaded but not converted
-                return filename
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
                 
-    except Exception as e:
-        logger.warning(f"Strategy 1 failed: {e}")
-    return None
- def _download_strategy_2(self, url: str) -> Optional[str]:
-    """Alternative: Use specific format bypass"""
-    self._rate_limit()
-    try:
-        # Extract video ID first
-        video_id = url.split('v=')[-1].split('&')[0]
-        
-        ydl_opts = {
-            # Try different approach
-            'format': 'worstaudio/worst',
-            'outtmpl': os.path.join(self.download_path, f'{video_id}.%(ext)s'),
-            'quiet': True,
-            'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
-            'user_agent': random.choice(self.user_agents),
-            
-            # Bypass JavaScript requirement
-            'extractor_args': {
-                'youtube': {
-                    'player_client': ['android'],
-                    'skip': ['dash', 'hls']
-                }
-            },
-            
-            'ignoreerrors': True,
-        }
-        
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            
-            # Find the downloaded file
-            import glob
-            pattern = os.path.join(self.download_path, f'{video_id}.*')
-            files = glob.glob(pattern)
-            
-            if files:
-                downloaded_file = files[0]
+                # Manually find and convert audio
+                import glob
+                video_id = url.split('v=')[-1].split('&')[0]
+                pattern = os.path.join(self.download_path, f'{video_id}.*')
+                files = glob.glob(pattern)
                 
-                # If it's webm/m4a, convert to mp3
-                if downloaded_file.endswith(('.webm', '.m4a')):
-                    mp3_file = os.path.splitext(downloaded_file)[0] + '.mp3'
-                    os.system(f'ffmpeg -i "{downloaded_file}" -codec:a libmp3lame -q:a 2 "{mp3_file}" -y 2>/dev/null')
-                    
-                    if os.path.exists(mp3_file):
-                        os.remove(downloaded_file)
-                        return mp3_file
+                for file in files:
+                    # If it's an audio file, convert to mp3
+                    if file.endswith(('.webm', '.m4a', '.opus')):
+                        mp3_file = os.path.splitext(file)[0] + '.mp3'
+                        os.system(f'ffmpeg -i "{file}" -codec:a libmp3lame -q:a 2 "{mp3_file}" -y 2>/dev/null')
+                        
+                        if os.path.exists(mp3_file):
+                            os.remove(file)
+                            return mp3_file
                 
-                return downloaded_file
+                return files[0] if files else None
                 
-    except Exception as e:
-        logger.warning(f"Strategy 2 failed: {e}")
-    return None
- def _download_strategy_3(self, url: str) -> Optional[str]:
-    """Direct download using yt-dlp's internal methods"""
-    self._rate_limit()
-    try:
-        video_id = url.split('v=')[-1].split('&')[0]
-        
-        # Create temp file
-        temp_file = tempfile.NamedTemporaryFile(
-            suffix='.mp3', 
-            delete=False,
-            dir=self.download_path
-        )
-        temp_file.close()
-        
-        # Use yt-dlp command directly with special args
-        import subprocess
-        
-        cmd = [
-            'yt-dlp',
-            '-x', '--audio-format', 'mp3',
-            '--audio-quality', '192K',
-            '--output', temp_file.name,
-            '--user-agent', random.choice(self.user_agents),
-            '--cookies', self.cookies_file if os.path.exists(self.cookies_file) else '',
-            '--extractor-args', 'youtube:player_client=android,skip=dash',
-            '--no-check-certificate',
-            url
-        ]
-        
-        # Remove empty --cookies if no file
-        if not os.path.exists(self.cookies_file):
-            cmd.remove('--cookies')
-            cmd.remove('')
-        
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        
-        if result.returncode == 0:
-            # Check if file was created
-            if os.path.exists(temp_file.name + '.mp3'):
-                return temp_file.name + '.mp3'
-            elif os.path.exists(temp_file.name):
-                return temp_file.name
-        
+        except Exception as e:
+            logger.error(f"Last resort failed: {e}")
         return None
-        
-    except Exception as e:
-        logger.warning(f"Strategy 3 failed: {e}")
-    return None
+
+    def _download_strategy_1(self, url: str) -> Optional[str]:
+        """Primary: yt-dlp with correct format selection for 2024"""
+        self._rate_limit()
+        try:
+            ydl_opts = {
+                # ===== FIXED FORMAT SELECTION =====
+                'format': 'bestaudio[ext=webm]/bestaudio[ext=m4a]/bestaudio/best',
+                
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+                
+                'outtmpl': os.path.join(self.download_path, '%(id)s.%(ext)s'),
+                'quiet': False,
+                'no_warnings': False,
+                'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
+                'user_agent': random.choice(self.user_agents),
+                
+                # ===== CRITICAL: Add these YouTube extractor args =====
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android', 'ios', 'web'],
+                        'player_skip': ['configs', 'webpage', 'js'],
+                        'formats': ['audio']
+                    }
+                },
+                
+                # ===== Add JavaScript runtime =====
+                'extractor_retries': 3,
+                'ignoreerrors': True,
+                'retries': 10,
+                'fragment_retries': 10,
+                'skip_unavailable_fragments': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                filename = ydl.prepare_filename(info)
+                
+                # Convert to mp3
+                base, ext = os.path.splitext(filename)
+                mp3_filename = base + '.mp3'
+                
+                if os.path.exists(mp3_filename):
+                    logger.info(f"✅ Strategy 1 succeeded: {mp3_filename}")
+                    return mp3_filename
+                elif os.path.exists(filename):
+                    # File downloaded but not converted
+                    return filename
+                    
+        except Exception as e:
+            logger.warning(f"Strategy 1 failed: {e}")
+        return None
+
+    def _download_strategy_2(self, url: str) -> Optional[str]:
+        """Alternative: Use specific format bypass"""
+        self._rate_limit()
+        try:
+            # Extract video ID first
+            video_id = url.split('v=')[-1].split('&')[0]
+            
+            ydl_opts = {
+                # Try different approach
+                'format': 'worstaudio/worst',
+                'outtmpl': os.path.join(self.download_path, f'{video_id}.%(ext)s'),
+                'quiet': True,
+                'cookiefile': self.cookies_file if os.path.exists(self.cookies_file) else None,
+                'user_agent': random.choice(self.user_agents),
+                
+                # Bypass JavaScript requirement
+                'extractor_args': {
+                    'youtube': {
+                        'player_client': ['android'],
+                        'skip': ['dash', 'hls']
+                    }
+                },
+                
+                'ignoreerrors': True,
+            }
+            
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                
+                # Find the downloaded file
+                import glob
+                pattern = os.path.join(self.download_path, f'{video_id}.*')
+                files = glob.glob(pattern)
+                
+                if files:
+                    downloaded_file = files[0]
+                    
+                    # If it's webm/m4a, convert to mp3
+                    if downloaded_file.endswith(('.webm', '.m4a')):
+                        mp3_file = os.path.splitext(downloaded_file)[0] + '.mp3'
+                        os.system(f'ffmpeg -i "{downloaded_file}" -codec:a libmp3lame -q:a 2 "{mp3_file}" -y 2>/dev/null')
+                        
+                        if os.path.exists(mp3_file):
+                            os.remove(downloaded_file)
+                            return mp3_file
+                    
+                    return downloaded_file
+                    
+        except Exception as e:
+            logger.warning(f"Strategy 2 failed: {e}")
+        return None
+
+    def _download_strategy_3(self, url: str) -> Optional[str]:
+        """Direct download using yt-dlp's internal methods"""
+        self._rate_limit()
+        try:
+            video_id = url.split('v=')[-1].split('&')[0]
+            
+            # Create temp file
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.mp3', 
+                delete=False,
+                dir=self.download_path
+            )
+            temp_file.close()
+            
+            # Use yt-dlp command directly with special args
+            import subprocess
+            
+            cmd = [
+                'yt-dlp',
+                '-x', '--audio-format', 'mp3',
+                '--audio-quality', '192K',
+                '--output', temp_file.name,
+                '--user-agent', random.choice(self.user_agents),
+                '--cookies', self.cookies_file if os.path.exists(self.cookies_file) else '',
+                '--extractor-args', 'youtube:player_client=android,skip=dash',
+                '--no-check-certificate',
+                url
+            ]
+            
+            # Remove empty --cookies if no file
+            if not os.path.exists(self.cookies_file):
+                cmd.remove('--cookies')
+                cmd.remove('')
+            
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+            
+            if result.returncode == 0:
+                # Check if file was created
+                if os.path.exists(temp_file.name + '.mp3'):
+                    return temp_file.name + '.mp3'
+                elif os.path.exists(temp_file.name):
+                    return temp_file.name
+            
+            return None
+            
+        except Exception as e:
+            logger.warning(f"Strategy 3 failed: {e}")
+        return None
+
 # Global instance
 music_player = AdvancedMusicPlayer()
