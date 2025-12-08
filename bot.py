@@ -43,7 +43,10 @@ class GroupManagerBot:
 
         # Message handlers
         self.application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, welcome_new_member))
-        self.application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, detect_controversial))
+        self.application.add_handler(MessageHandler(
+            filters.ALL & ~filters.COMMAND & ~filters.StatusUpdate.ALL,
+            detect_controversial
+        ))
 
         # Arabic command wrappers
         self.application.add_handler(MessageHandler(filters.Regex(re.compile(r'^/مساعدة(?:\s|$)', re.IGNORECASE)), arabic_help))
