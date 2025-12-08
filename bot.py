@@ -31,7 +31,9 @@ class GroupManagerBot:
         self.application.add_handler(CommandHandler("delete", delete_messages))
         self.application.add_handler(CommandHandler("warn", warn_user))
         self.application.add_handler(CommandHandler("mute", mute_user))
+        self.application.add_handler(CommandHandler("unmute", unmute_user))
         self.application.add_handler(CommandHandler("ban", ban_user))
+
         self.application.add_handler(CommandHandler("kick", kick_user))
         self.application.add_handler(CommandHandler("rep", check_reputation))
         self.application.add_handler(CommandHandler("monitor", monitor_user))
