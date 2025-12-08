@@ -193,7 +193,7 @@ async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("unmute failed: %s", e)
 
 #check the muted users 
-async def statusM(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Show shadow-muted users (ADMIN ONLY)"""
     try:
         # CHECK: Is user admin?
