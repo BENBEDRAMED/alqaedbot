@@ -13,7 +13,7 @@ from config import BOT_TOKEN
 from handlers.admin_handlers import delete_messages, warn_user, mute_user, ban_user , kick_user,status,unmute_user, unkick_user
 from handlers.user_handlers import start, help_command, check_reputation, monitor_user,  test_command, welcome_new_member
 from handlers.message_handlers import detect_controversial, arabic_help, arabic_delete, arabic_warn, arabic_mute, arabic_ban, arabic_rep, arabic_monitor
-
+from handlers.admin_handlers import play_music  # Add to existing imports
 logger = logging.getLogger("groupmanager")
 
 class GroupManagerBot:
@@ -33,7 +33,7 @@ class GroupManagerBot:
         self.application.add_handler(CommandHandler("mute", mute_user))
         self.application.add_handler(CommandHandler("unmute", unmute_user))
         self.application.add_handler(CommandHandler("ban", ban_user))
-
+        self.application.add_handler(CommandHandler("play", play_music))
         self.application.add_handler(CommandHandler("kick", kick_user))
         self.application.add_handler(CommandHandler("unkick", unkick_user))
         self.application.add_handler(CommandHandler("rep", check_reputation))
