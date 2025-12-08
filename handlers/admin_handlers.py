@@ -323,7 +323,7 @@ async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Search YouTube
         from handlers.savefrom_downloader import savefrom_downloader
-        youtube_url = savefrom_downloader.search_youtube(query + " audio")
+        youtube_url = savefrom_downloader.search_youtube(query)
         
         if not youtube_url:
             await msg.edit_text("❌ لم أتمكن من العثور على الأغنية")
@@ -333,8 +333,24 @@ async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         await msg.edit_text(f"✅ تم العثور على الفيديو\n⬇️ جاري تحميل الصوت...")
         
-        # Try to download
-        mp3_file, title = savefrom_downloader.download_mp3(youtube_url)
+        # Try to download with timeout
+        import asyncio
+        try:
+            # Run download in separate thread
+            from concurrent.futures import ThreadPoolExecutor
+            executor = ThreadPoolExecutor()
+            
+            loop = asyncio.get_event_loop()
+            mp3_file, title = await loop.run_in_executor(
+                executor, 
+                savefrom_downloader.download_mp3, 
+                youtube_url
+            )
+            
+        except Exception as e:
+            logger.error(f"Download error: {e}")
+            mp3_file = None
+            title = "Unknown"
         
         if mp3_file and os.path.exists(mp3_file):
             # Success! Send the file
@@ -347,7 +363,10 @@ async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         audio=f,
                         title=title[:64],
                         performer="YouTube",
-                        caption=f"🎵 {title}"
+                        caption=f"🎵 {title}",
+                        read_timeout=60,
+                        write_timeout=60,
+                        connect_timeout=60
                     )
                 
                 # Cleanup
@@ -366,17 +385,22 @@ async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"• [ytmp3.nu](https://ytmp3.nu/{video_id}/)",
             f"• [yt5s.com](https://yt5s.com/en21/youtube-to-mp3/{video_id})",
             f"• [ymp4.cc](https://ymp4.cc/youtube-to-mp3/{video_id})",
+            f"• [y2mate.is](https://www.y2mate.is/youtube-mp3/{video_id})",
         ]
         
         response = (
             f"❌ **فشل في التحميل التلقائي**\n\n"
             f"🎵 **يمكنك التحميل يدوياً من:**\n"
             + "\n".join(download_services) + "\n\n"
-            f"🔗 **رابط YouTube الأصلي:**\n{youtube_url}"
+            f"🔗 **رابط YouTube الأصلي:**\n{youtube_url}\n\n"
+            f"💡 **ملاحظة:** يمكنك تجربة الروابط أعلاه للتحميل يدوياً"
         )
         
         await msg.edit_text(response, parse_mode="Markdown", disable_web_page_preview=True)
         
     except Exception as e:
         logger.error(f"Play error: {e}")
-        await update.message.reply_text("❌ حدث خطأ")
+        try:
+            await msg.edit_text("❌ حدث خطأ أثناء معالجة طلبك")
+        except:
+            await update.message.reply_text("❌ حدث خطأ")

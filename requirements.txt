@@ -2,7 +2,7 @@ python-telegram-bot[webhooks]==21.7
 
 requests==2.31.0
 flask==3.0.3
-
-
+youtube-search-python
+pytube
 yt-dlp
 requests==2.31.0
