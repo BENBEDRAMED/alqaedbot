@@ -312,57 +312,80 @@ async def unkick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text("❌ حدث خطأ أثناء محاولة إلغاء الحظر")
 
 async def play_music(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Search, download, and send YouTube audio"""
+    """Search YouTube, download MP3 via savefrom.net, and send to group"""
     try:
+        # Check if user provided song name
         if not context.args:
-            await update.message.reply_text("🎵 استخدام: /play [اسم الأغنية]")
+            await update.message.reply_text(
+                "🎵 استخدام: /play [اسم الأغنية]\n"
+                "مثال: /play Shape of You\n"
+                "أو: /play أغنية حبيبي"
+            )
             return
-
+        
+        # Get song query
         query = " ".join(context.args)
-        status_msg = await update.message.reply_text(f"🔍 جاري البحث عن: '{query}'...")
-
-        # Use the advanced player
-        from handlers.music_handlers import music_player
-        url = music_player.search_youtube(query)
-
-        if not url:
-            await status_msg.edit_text("❌ لم أتمكن من العثور على الأغنية.")
+        
+        # Send searching message
+        search_msg = await update.message.reply_text(
+            f"🔍 جاري البحث عن: '{query}'..."
+        )
+        
+        # Step 1: Search YouTube
+        from handlers.savefrom_downloader import savefrom_downloader
+        youtube_url = savefrom_downloader.search_youtube(query + " audio")
+        
+        if not youtube_url:
+            await search_msg.edit_text("❌ لم أتمكن من العثور على الأغنية")
             return
-
-        # Get video info for feedback
-        title, duration = music_player.get_video_info(url)
-        await status_msg.edit_text(f"🎵 تم العثور على: **{title}**\n⏳ جاري التحميل...", parse_mode="Markdown")
-
-        # Download audio (this uses the multi-strategy method)
-        audio_file = music_player.download_audio(url)
-
-        if not audio_file or not os.path.exists(audio_file):
-            await status_msg.edit_text("❌ فشل في تحميل الصوت. قد يكون الفيديو محمياً أو هناك مشكلة في الشبكة.")
+        
+        await search_msg.edit_text(f"✅ تم العثور على الفيديو\n⬇️ جاري تحميل الصوت...")
+        
+        # Step 2: Download MP3 via savefrom.net
+        mp3_file, title = savefrom_downloader.download_mp3(youtube_url)
+        
+        if not mp3_file or not os.path.exists(mp3_file):
+            await search_msg.edit_text(
+                f"❌ فشل في تحميل الصوت\n"
+                f"🔗 يمكنك تحميله يدوياً من:\n{youtube_url}"
+            )
             return
-
-        # Send the audio file
-        await status_msg.edit_text("📤 جاري إرسال الملف...")
+        
+        # Step 3: Send MP3 to group
+        await search_msg.edit_text(f"📤 جاري إرسال الملف: {title}")
+        
         try:
-            with open(audio_file, 'rb') as f:
+            with open(mp3_file, 'rb') as audio_file:
+                # Get file size for logging
+                file_size = os.path.getsize(mp3_file)
+                
+                # Send audio to Telegram
                 await context.bot.send_audio(
                     chat_id=update.effective_chat.id,
-                    audio=f,
-                    title=title[:64],  # Telegram title limit
-                    duration=int(duration.split(':')[0])*60 + int(duration.split(':')[1]) if ':' in duration else 0,
+                    audio=audio_file,
+                    title=title[:64],  # Telegram limits title to 64 chars
                     performer="YouTube",
-                    caption=f"🎵 {title}"
+                    caption=f"🎵 {title}",
+                    parse_mode="Markdown"
                 )
-            # Cleanup
-            os.remove(audio_file)
-            await status_msg.edit_text(f"✅ تم إرسال: **{title}**", parse_mode="Markdown")
-        except Exception as e:
-            logger.error(f"Failed to send audio: {e}")
-            await status_msg.edit_text("❌ فشل في إرسال الملف. قد يكون الملف كبيراً جداً.")
-            if os.path.exists(audio_file):
-                os.remove(audio_file)
+                
+                logger.info(f"✅ Sent MP3: {title} ({file_size/1024/1024:.1f}MB)")
+            
+            # Step 4: Cleanup - delete the file
+            os.remove(mp3_file)
+            await search_msg.edit_text(f"✅ تم إرسال: **{title}**", parse_mode="Markdown")
+            
+        except Exception as send_error:
+            logger.error(f"Failed to send audio: {send_error}")
+            await search_msg.edit_text(f"❌ فشل في إرسال الملف: {send_error}")
+            
+            # Clean up file even if send failed
+            if os.path.exists(mp3_file):
+                os.remove(mp3_file)
+                
     except Exception as e:
         logger.exception(f"play_music failed: {e}")
         try:
-            await update.message.reply_text("❌ حدث خطأ داخلي أثناء معالجة طلبك.")
+            await update.message.reply_text("❌ حدث خطأ أثناء تشغيل الموسيقى")
         except:
             pass
