@@ -6,9 +6,10 @@ import re
 from telegram import Update
 from telegram.ext import ContextTypes
 from config import CONTROVERSIAL_WORDS
+from database import Database
 
 logger = logging.getLogger("groupmanager")
-
+db = Database()
 async def detect_controversial(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Detect controversial content AND shadow-muted users"""
     try:
