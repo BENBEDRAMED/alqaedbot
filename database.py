@@ -11,7 +11,7 @@ logger = logging.getLogger("groupmanager")
 
 class Database:
     def __init__(self, path=DB_PATH):
-        # Ensure the data directory exists
+    
         os.makedirs(os.path.dirname(path), exist_ok=True)
         
         self.path = path
@@ -21,7 +21,7 @@ class Database:
     def create_tables(self):
         cur = self.conn.cursor()
         
-        # Users table (existing)
+ 
         cur.execute('''
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY,
@@ -32,7 +32,7 @@ class Database:
             )
         ''')
         
-        # NEW: Monitored users (for shadow-mute)
+  
         cur.execute('''
             CREATE TABLE IF NOT EXISTS monitored_users (
                 user_id INTEGER,
@@ -43,7 +43,7 @@ class Database:
             )
         ''')
         
-        # NEW: Message log (optional - track deleted messages)
+ 
         cur.execute('''
             CREATE TABLE IF NOT EXISTS message_log (
                 message_id INTEGER,
@@ -57,7 +57,7 @@ class Database:
         
         self.conn.commit()
 
-    # ===== EXISTING FUNCTIONS =====
+ 
     def add_warning(self, user_id: int, username: str = ""):
         """Add a warning to user"""
         try:
@@ -105,7 +105,7 @@ class Database:
             logger.error(f"Error getting total users: {e}")
             return 0
 
-    # ===== NEW: SHADOW-MUTE FUNCTIONS =====
+
     
     def add_monitored_user(self, user_id: int, chat_id: int, action_type: str = "muted"):
         """Add user to shadow-mute monitoring"""
@@ -185,7 +185,7 @@ class Database:
             logger.error(f"Error getting monitored count: {e}")
             return 0
 
-    # ===== NEW: MESSAGE LOGGING =====
+ 
     
     def log_deleted_message(self, message_id: int, user_id: int, chat_id: int, 
                            text: str = "", reason: str = "shadow_mute"):
@@ -236,7 +236,7 @@ class Database:
             logger.error(f"Error getting deleted messages: {e}")
             return []
 
-    # ===== NEW: CLEANUP FUNCTIONS =====
+ 
     
     def cleanup_old_logs(self, days: int = 30):
         """Delete old message logs to save space"""
@@ -266,8 +266,6 @@ class Database:
         except Exception as e:
             logger.error(f"Error resetting warnings: {e}")
             return False
-
-    # ===== NEW: REPUTATION SYSTEM =====
     
     def update_reputation(self, user_id: int, change: int):
         """Add or subtract reputation points"""
