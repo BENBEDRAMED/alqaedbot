@@ -10,19 +10,40 @@ from config import CONTROVERSIAL_WORDS
 logger = logging.getLogger("groupmanager")
 
 async def detect_controversial(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Detect and handle controversial content"""
+    """Detect controversial content AND shadow-muted users"""
     try:
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        
+        # CHECK 1: Is this user shadow-muted?
+        if db.is_user_monitored(user_id, chat_id, "muted"):
+            try:
+                await update.message.delete()
+                logger.debug(f"Auto-deleted message from shadow-muted user {user_id}")
+                # Optional: Send them a private warning
+                try:
+                    await context.bot.send_message(
+                        user_id,
+                        "⚠️ أنت مكتوم في هذه المجموعة. رسائلك سيتم حذفها تلقائياً."
+                    )
+                except:
+                    pass  # Can't send DM
+                return  # Stop further processing
+            except Exception as e:
+                logger.warning(f"Could not delete shadow-muted message: {e}")
+        
+        # CHECK 2: Original controversial words detection
         text = (update.message.text or "").lower()
         found = [w for w in CONTROVERSIAL_WORDS if w in text]
         if found:
             try:
                 await update.message.delete()
             except Exception:
-                logger.debug("Could not delete message (maybe missing rights)")
-            await context.bot.send_message(update.effective_chat.id, "⚠️ تم حذف رسالة تحتوي على كلمات مثيرة للجدل")
+                logger.debug("Could not delete controversial message")
+            await context.bot.send_message(chat_id, "⚠️ تم حذف رسالة تحتوي على كلمات مثيرة للجدل")
+            
     except Exception:
         logger.exception("detect_controversial failed")
-
 # Arabic command wrappers - import inside functions to avoid circular imports
 async def arabic_help(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from handlers.user_handlers import help_command

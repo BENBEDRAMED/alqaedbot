@@ -71,7 +71,7 @@ async def warn_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("Failed to store warning")
         await update.message.reply_text("❌ خطأ داخلي أثناء حفظ التحذير")
 
-async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Mute a user for specified duration"""
     try:
         logger.info("Handling mute command from %s", update.effective_user.id)
@@ -81,7 +81,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     target, arg_start = await resolve_target_user(update, context)
     if not target:
-        await update.message.reply_text("⚡ يجب الرد على رسالة المستخدم أو اذكر @username أو ID. مثال: (رد) + /mute 1h")
+        await update.message.reply_text("⚡ يجب الرد على رسالة المستخدم أو اذكر @username أو ID. مثال: (رد) + /ban 1h")
         return
 
     # Get duration
@@ -115,7 +115,7 @@ async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
         logger.exception("restrict failed: %s", e)
         await update.message.reply_text(f"❌ تعذر كتم المستخدم: {e}")
 
-async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def kick_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Ban a user"""
     target, _ = await resolve_target_user(update, context)
     if not target:
@@ -128,3 +128,142 @@ async def ban_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.exception("ban failed: %s", e)
         await update.message.reply_text(f"❌ تعذر حظر المستخدم: {e}")
+
+# mute the user 
+async def mute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Add user to auto-delete list (shadow mute)"""
+    try:
+        # Delete command message
+        try:
+            await update.message.delete()
+        except:
+            pass
+        
+        target, _ = await resolve_target_user(update, context)
+        if not target:
+            await context.bot.send_message(
+                update.effective_user.id,
+                "⚡ يجب الرد على رسالة المستخدم أو اذكر @username أو ID"
+            )
+            return
+        
+        # Add to monitored users database
+        db.add_monitored_user(target.id, update.effective_chat.id, "muted")
+        
+        # Send confirmation to admin
+        await context.bot.send_message(
+            update.effective_user.id,
+            f"👻 تم إسكات {getattr(target,'first_name',str(target.id))}\n"
+            f"سيتم حذف جميع رسائله تلقائياً"
+        )
+        
+        logger.info(f"Shadow muted user {target.id} in chat {update.effective_chat.id}")
+        
+    except Exception as e:
+        logger.exception("shadow_mute failed: %s", e)
+
+#unmute the user
+async def unmute_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Remove user from auto-delete list"""
+    try:
+        try:
+            await update.message.delete()
+        except:
+            pass
+        
+        target, _ = await resolve_target_user(update, context)
+        if not target:
+            await context.bot.send_message(
+                update.effective_user.id,
+                "⚡ استخدام: رد على رسالة المستخدم + /unmute أو /unmute @username"
+            )
+            return
+        
+        # Remove from monitored users
+        db.remove_monitored_user(target.id, update.effective_chat.id)
+        
+        await context.bot.send_message(
+            update.effective_user.id,
+            f"🔊 تم إلغاء إسكات {getattr(target,'first_name',str(target.id))}"
+        )
+        
+        logger.info(f"Un-shadow-muted user {target.id}")
+        
+    except Exception as e:
+        logger.exception("unmute failed: %s", e)
+
+#check the muted users 
+async def statusM(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Show shadow-muted users (ADMIN ONLY)"""
+    try:
+        # CHECK: Is user admin?
+        user_id = update.effective_user.id
+        chat_id = update.effective_chat.id
+        
+        try:
+            chat_member = await context.bot.get_chat_member(chat_id, user_id)
+            if chat_member.status not in ["administrator", "creator"]:
+                await update.message.reply_text("❌ هذا الأمر للمشرفين فقط")
+                return
+        except Exception:
+            await update.message.reply_text("❌ لا يمكن التحقق من صلاحياتك")
+            return
+        
+        # Get monitored users from database
+        monitored = db.get_monitored_users(chat_id)
+        
+        if not monitored:
+            await update.message.reply_text(
+                "📊 **حالة المجموعة:**\n"
+                "──────────────\n"
+                "👥 المستخدمون المكتومون: **0**\n"
+                "✅ لا يوجد مستخدمون تحت الإسكات الخفي حالياً."
+            )
+            return
+        
+        response = "📊 **حالة المجموعة:**\n"
+        response += "──────────────\n"
+        response += f"👥 المستخدمون المكتومون: **{len(monitored)}**\n\n"
+        
+        for user_id, action_type, monitored_at in monitored:
+            try:
+                # Get user info
+                user = await context.bot.get_chat_member(chat_id, user_id)
+                name = user.user.first_name or f"ID: {user_id}"
+                username = f"@{user.user.username}" if user.user.username else ""
+                
+                # Format date
+                from datetime import datetime
+                muted_date = datetime.strptime(monitored_at, "%Y-%m-%d %H:%M:%S")
+                time_str = muted_date.strftime("%Y-%m-%d %H:%M")
+                
+                response += f"👤 **{name}** {username}\n"
+                response += f"   📌 حالة: {action_type}\n"
+                response += f"   ⏰ منذ: {time_str}\n"
+                response += "   ──────\n"
+                
+            except Exception as e:
+                logger.debug(f"Could not get info for user {user_id}: {e}")
+                response += f"👤 ID: **{user_id}**\n"
+                response += f"   📌 حالة: {action_type}\n"
+                response += f"   ⏰ منذ: {monitored_at}\n"
+                response += "   ──────\n"
+        
+        # Add warning stats
+        total_warnings = 0
+        try:
+            cursor = db.conn.cursor()
+            cursor.execute("SELECT SUM(warnings) FROM users")
+            result = cursor.fetchone()
+            total_warnings = result[0] or 0
+        except:
+            pass
+        
+        response += f"\n⚠️ **إجمالي التحذيرات:** {total_warnings}"
+        
+        # Send the status report
+        await update.message.reply_text(response, parse_mode="Markdown")
+        
+    except Exception as e:
+        logger.exception("status command failed: %s", e)
+        await update.message.reply_text("❌ حدث خطأ أثناء جلب الحالة")

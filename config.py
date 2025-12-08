@@ -16,8 +16,7 @@ DB_PATH = os.path.join("data", "group_manager.db")
 
 # Content filtering
 CONTROVERSIAL_WORDS = [
-    "سياسة", "طائفية", "عنصرية", "شتيمة", "سب", "تحذير",
-    "كره", "تطرف", "إساءة", "فساد", "فاسد", "سخرية"
+    "سياسة", "كراهية", "جنس", "مخدرات"
 ]
 
 WELCOME_MESSAGES = [
